@@ -122,13 +122,23 @@ class Fork {
     }
 }
 
+// .start() starts a new thread
+// Thread goes from new state to runnable state
+// When this thread gets a chance, run() method runs
 class Philosopher extends Thread {
+    // Thinking
     private static final Color THINK_COLOR = Color.blue;
+    // Waiting
     private static final Color WAIT_COLOR = Color.red;
+    // Eating
     private static final Color EAT_COLOR = Color.green;
+
+    // Time between blue to red
     private static final double THINK_TIME = 4.0;
+    // Time between red to green
+    // Time between becoming hungry and grabbing first fork
     private static final double FUMBLE_TIME = 2.0;
-        // time between becoming hungry and grabbing first fork
+    // Time between green and blue again (drops forks when done eating)
     private static final double EAT_TIME = 3.0;
 
     private Coordinator c;
@@ -162,6 +172,7 @@ class Philosopher extends Thread {
     // start method of Thread calls run; you don't
     //
     public void run() {
+        // while true
         for (;;) {
             try {
                 if (c.gate()) delay(EAT_TIME/2.0);
@@ -233,7 +244,7 @@ class Philosopher extends Thread {
         Thread.yield();     // you aren't allowed to remove this
         right_fork.release();
     }
-}
+} //end of Philosopher class
 
 // Graphics panel in which philosophers and forks appear.
 //
@@ -308,6 +319,9 @@ class Table extends JPanel {
                 forks[i],
                 forks[(i+1) % NUM_PHILS],
                 c);
+            // starts a new thread
+            // Thread goes from new state to runnable state
+            // When this thread gets a chance, run() method runs
             philosophers[i].start();
         }
     }
@@ -318,8 +332,10 @@ class ResetException extends Exception { };
 // The Coordinator serves to slow down execution, so that behavior is
 // visible on the screen, and to notify all running threads when the user
 // wants them to reset.
-//
+// Each thread also has a coordinator
+// Used to indicate the state of the thread
 class Coordinator {
+
     public enum State { PAUSED, RUNNING, RESET }
     private State state = State.PAUSED;
 
@@ -346,7 +362,7 @@ class Coordinator {
 
     // Return true if we were forced to wait because the coordinator was
     // paused or reset.
-    //
+    // Can be called to check the state of the thread anytime during thread.run(), an infinite loop
     public synchronized boolean gate() throws ResetException {
         if (state == State.PAUSED || state == State.RESET) {
             try {

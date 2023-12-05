@@ -39,8 +39,8 @@ import java.lang.Thread.*;
 
 public class Dining {
     private static final int CANVAS_SIZE = 360;
-        // pixels in each direction;
-        // needs to agree with size in dining.html
+    // pixels in each direction;
+    // needs to agree with size in dining.html
 
     public static void main(String[] args) {
         JFrame f = new JFrame("Dining");
@@ -60,7 +60,7 @@ public class Dining {
             System.err.println("unable to create GUI");
         }
 
-        f.pack();            // calculate size of frame
+        f.pack(); // calculate size of frame
         f.setVisible(true);
     }
 }
@@ -98,8 +98,8 @@ class Fork {
     //
     public void acquire(int px, int py) {
         clear();
-        x = (orig_x + px)/2;
-        y = (orig_y + py)/2;
+        x = (orig_x + px) / 2;
+        y = (orig_y + py) / 2;
         t.repaint();
     }
 
@@ -111,14 +111,15 @@ class Fork {
     //
     public void draw(Graphics g) {
         g.setColor(Color.black);
-        g.fillOval(x-XSIZE/2, y-YSIZE/2, XSIZE, YSIZE);
+        g.fillOval(x - XSIZE / 2, y - YSIZE / 2, XSIZE, YSIZE);
     }
+
     // erase self
     //
     private void clear() {
         Graphics g = t.getGraphics();
         g.setColor(t.getBackground());
-        g.fillOval(x-XSIZE/2, y-YSIZE/2, XSIZE, YSIZE);
+        g.fillOval(x - XSIZE / 2, y - YSIZE / 2, XSIZE, YSIZE);
     }
 }
 
@@ -158,7 +159,7 @@ class Philosopher extends Thread {
     // of bounding box instead.
     //
     public Philosopher(Table T, int cx, int cy,
-                       Fork lf, Fork rf, Coordinator C) {
+            Fork lf, Fork rf, Coordinator C) {
         t = T;
         x = cx;
         y = cy;
@@ -170,18 +171,21 @@ class Philosopher extends Thread {
     }
 
     // start method of Thread calls run; you don't
-    //
+    // When thread gets a chance, this method runs
     public void run() {
         // while true
         for (;;) {
             try {
-                if (c.gate()) delay(EAT_TIME/2.0);
+                if (c.gate())
+                    delay(EAT_TIME / 2.0);
                 think();
-                if (c.gate()) delay(THINK_TIME/2.0);
+                if (c.gate())
+                    delay(THINK_TIME / 2.0);
                 hunger();
-                if (c.gate()) delay(FUMBLE_TIME/2.0);
+                if (c.gate())
+                    delay(FUMBLE_TIME / 2.0);
                 eat();
-            } catch(ResetException e) { 
+            } catch (ResetException e) {
                 color = THINK_COLOR;
                 t.repaint();
             }
@@ -192,27 +196,27 @@ class Philosopher extends Thread {
     //
     public void draw(Graphics g) {
         g.setColor(color);
-        g.fillOval(x-XSIZE/2, y-YSIZE/2, XSIZE, YSIZE);
+        g.fillOval(x - XSIZE / 2, y - YSIZE / 2, XSIZE, YSIZE);
     }
 
     // sleep for secs +- FUDGE (%) seconds
-    //
     private static final double FUDGE = 0.2;
+
     private void delay(double secs) throws ResetException {
         double ms = 1000 * secs;
         int window = (int) (2.0 * ms * FUDGE);
         int add_in = prn.nextInt() % window;
-        int original_duration = (int) ((1.0-FUDGE) * ms + add_in);
+        int original_duration = (int) ((1.0 - FUDGE) * ms + add_in);
         int duration = original_duration;
         for (;;) {
             try {
                 Thread.sleep(duration);
                 return;
-            } catch(InterruptedException e) {
+            } catch (InterruptedException e) {
                 if (c.isReset()) {
                     throw new ResetException();
-                } else {        // suspended
-                    c.gate();   // wait until resumed
+                } else { // suspended
+                    c.gate(); // wait until resumed
                     duration = original_duration / 2;
                     // don't wake up instantly; sleep for about half
                     // as long as originally instructed
@@ -232,7 +236,7 @@ class Philosopher extends Thread {
         t.repaint();
         delay(FUMBLE_TIME);
         left_fork.acquire(x, y);
-        Thread.yield();     // you aren't allowed to remove this
+        Thread.yield(); // you aren't allowed to remove this
         right_fork.acquire(x, y);
     }
 
@@ -241,10 +245,10 @@ class Philosopher extends Thread {
         t.repaint();
         delay(EAT_TIME);
         left_fork.release();
-        Thread.yield();     // you aren't allowed to remove this
+        Thread.yield(); // you aren't allowed to remove this
         right_fork.release();
     }
-} //end of Philosopher class
+} // end of Philosopher class
 
 // Graphics panel in which philosophers and forks appear.
 //
@@ -291,34 +295,41 @@ class Table extends JPanel {
             philosophers[i].draw(g);
         }
         g.setColor(Color.black);
-        g.drawRect(0, 0, getWidth()-1, getHeight()-1);
+        g.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
     }
 
     // Constructor
     //
     // Note that angles are measured in radians, not degrees.
     // The origin is the upper left corner of the frame.
-    //
-    public Table(Coordinator C, int CANVAS_SIZE) {    // constructor
+    // When new Table instance is created, we invoke constructor of Table,
+    // which creates instances of Philosophers and Forks
+    // Table is created within Main function and passed into UI instance
+    // Table also starts the Philosopher (Threads) instances
+    public Table(Coordinator C, int CANVAS_SIZE) { // constructor
         c = C;
         forks = new Fork[NUM_PHILS];
         philosophers = new Philosopher[NUM_PHILS];
         setPreferredSize(new Dimension(CANVAS_SIZE, CANVAS_SIZE));
 
+        // Where forks and philosophers are layed out at on the table
         for (int i = 0; i < NUM_PHILS; i++) {
-            double angle = Math.PI/2 + 2*Math.PI/NUM_PHILS*(i-0.5);
+            double angle = Math.PI / 2 + 2 * Math.PI / NUM_PHILS * (i - 0.5);
+            // new Fork(Table t, int x, int y)
+            // Same Table instance for alll forks and all philosophers
             forks[i] = new Fork(this,
-                (int) (CANVAS_SIZE/2.0 + CANVAS_SIZE/6.0 * Math.cos(angle)),
-                (int) (CANVAS_SIZE/2.0 - CANVAS_SIZE/6.0 * Math.sin(angle)));
+                    (int) (CANVAS_SIZE / 2.0 + CANVAS_SIZE / 6.0 * Math.cos(angle)),
+                    (int) (CANVAS_SIZE / 2.0 - CANVAS_SIZE / 6.0 * Math.sin(angle)));
         }
+
         for (int i = 0; i < NUM_PHILS; i++) {
-            double angle = Math.PI/2 + 2*Math.PI/NUM_PHILS*i;
+            double angle = Math.PI / 2 + 2 * Math.PI / NUM_PHILS * i;
             philosophers[i] = new Philosopher(this,
-                (int) (CANVAS_SIZE/2.0 + CANVAS_SIZE/3.0 * Math.cos(angle)),
-                (int) (CANVAS_SIZE/2.0 - CANVAS_SIZE/3.0 * Math.sin(angle)),
-                forks[i],
-                forks[(i+1) % NUM_PHILS],
-                c);
+                    (int) (CANVAS_SIZE / 2.0 + CANVAS_SIZE / 3.0 * Math.cos(angle)),
+                    (int) (CANVAS_SIZE / 2.0 - CANVAS_SIZE / 3.0 * Math.sin(angle)),
+                    forks[i],
+                    forks[(i + 1) % NUM_PHILS],
+                    c);
             // starts a new thread
             // Thread goes from new state to runnable state
             // When this thread gets a chance, run() method runs
@@ -327,7 +338,8 @@ class Table extends JPanel {
     }
 }
 
-class ResetException extends Exception { };
+class ResetException extends Exception {
+};
 
 // The Coordinator serves to slow down execution, so that behavior is
 // visible on the screen, and to notify all running threads when the user
@@ -336,7 +348,10 @@ class ResetException extends Exception { };
 // Used to indicate the state of the thread
 class Coordinator {
 
-    public enum State { PAUSED, RUNNING, RESET }
+    public enum State {
+        PAUSED, RUNNING, RESET
+    }
+
     private State state = State.PAUSED;
 
     public synchronized boolean isPaused() {
@@ -357,30 +372,31 @@ class Coordinator {
 
     public synchronized void resume() {
         state = State.RUNNING;
-        notifyAll();        // wake up all waiting threads
+        notifyAll(); // wake up all waiting threads
     }
 
     // Return true if we were forced to wait because the coordinator was
     // paused or reset.
-    // Can be called to check the state of the thread anytime during thread.run(), an infinite loop
+    // Can be called to check the state of the thread anytime during thread.run(),
+    // an infinite loop
     public synchronized boolean gate() throws ResetException {
         if (state == State.PAUSED || state == State.RESET) {
             try {
                 wait();
-            } catch(InterruptedException e) {
+            } catch (InterruptedException e) {
                 if (isReset()) {
                     throw new ResetException();
                 }
             }
-            return true;        // waited
+            return true; // waited
         }
-        return false;           // didn't wait
+        return false; // didn't wait
     }
 }
 
-// Class UI is the user interface.  It displays a Table canvas above
-// a row of buttons.  Actions (event handlers) are defined for each of
-// the buttons.  Depending on the state of the UI, either the "run" or
+// Class UI is the user interface. It displays a Table canvas above
+// a row of buttons. Actions (event handlers) are defined for each of
+// the buttons. Depending on the state of the UI, either the "run" or
 // the "pause" button is the default (highlighted in most window
 // systems); it will often self-push if you hit carriage return.
 //
@@ -404,7 +420,7 @@ class UI extends JPanel {
         c = C;
         t = T;
 
-        final JPanel b = new JPanel();   // button panel
+        final JPanel b = new JPanel(); // button panel
 
         final JButton runButton = new JButton("Run");
         final JButton pauseButton = new JButton("Pause");
@@ -445,7 +461,7 @@ class UI extends JPanel {
         // put the Table canvas and the button panel into the UI:
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(
-            externalBorder, externalBorder, externalBorder, externalBorder));
+                externalBorder, externalBorder, externalBorder, externalBorder));
         add(t);
         add(b);
 

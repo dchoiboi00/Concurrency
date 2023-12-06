@@ -94,15 +94,20 @@ class Fork {
         t.repaint();
     }
 
+    // who wants it
     // arguments are coordinates of acquiring philosopher's center
-    //
+    // picks up the fork, move coordinates of fork. Indicating P has picked a specific fork up
     public void acquire(int px, int py) {
+        // clear paint
         clear();
+        // gets new location of the philosopher, px and py
+        // redraw fork
         x = (orig_x + px) / 2;
         y = (orig_y + py) / 2;
         t.repaint();
     }
 
+    // done using
     public void release() {
         reset();
     }
@@ -152,6 +157,7 @@ class Philosopher extends Thread {
     private Fork right_fork;
     private Random prn;
     private Color color;
+    private int philosopher_number_indicator;
 
     // Constructor.
     // cx and cy indicate coordinates of center
@@ -159,7 +165,7 @@ class Philosopher extends Thread {
     // of bounding box instead.
     //
     public Philosopher(Table T, int cx, int cy,
-            Fork lf, Fork rf, Coordinator C) {
+            Fork lf, Fork rf, Coordinator C, int i) {
         t = T;
         x = cx;
         y = cy;
@@ -168,23 +174,40 @@ class Philosopher extends Thread {
         c = C;
         prn = new Random();
         color = THINK_COLOR;
+        philosopher_number_indicator = i;
     }
 
-    // start method of Thread calls run; you don't
+    // start method of Thread calls run()
     // When thread gets a chance, this method runs
     public void run() {
         // while true
         for (;;) {
             try {
-                if (c.gate())
-                    delay(EAT_TIME / 2.0);
+                // Think doesn't require forks or any shared data
                 think();
                 if (c.gate())
                     delay(THINK_TIME / 2.0);
-                hunger();
-                if (c.gate())
-                    delay(FUMBLE_TIME / 2.0);
-                eat();
+
+                // lock the fork so that when a philosopher is using a fork object. No other philosopher uses it
+                // at the sametime
+                // sync left and right fork.
+                // or else, a thread might be trying to acquire a fork that's current in usage by another
+                // philosopher. So, if any left_fork is current being used by other 
+                // 
+                synchronized (left_fork) {
+                    synchronized (right_fork) {
+                        hunger();
+                        if (c.gate())
+                            delay(FUMBLE_TIME / 2.0);
+                        eat();
+                        if (c.gate())
+                            delay(EAT_TIME / 2.0);
+                    }
+                }
+
+                // hungry, we will request for both forks. But don't take fork yet until both
+                // fork is available
+
             } catch (ResetException e) {
                 color = THINK_COLOR;
                 t.repaint();
@@ -197,6 +220,13 @@ class Philosopher extends Thread {
     public void draw(Graphics g) {
         g.setColor(color);
         g.fillOval(x - XSIZE / 2, y - YSIZE / 2, XSIZE, YSIZE);
+        String label = String.valueOf(this.philosopher_number_indicator);
+        int labelX = x - g.getFontMetrics().stringWidth(label) / 2;
+        int labelY = y + g.getFontMetrics().getAscent() / 2;
+        g.setColor(Color.WHITE);
+
+        g.drawString(label, labelX, labelY);
+
     }
 
     // sleep for secs +- FUDGE (%) seconds
@@ -225,28 +255,54 @@ class Philosopher extends Thread {
         }
     }
 
+    // P is just thinking, blue
     private void think() throws ResetException {
+        System.out.println("Philosopher " + philosopher_number_indicator + " thinking");
         color = THINK_COLOR;
         t.repaint();
         delay(THINK_TIME);
     }
 
+    //
+    // P is hungry, red
+    // while in hunger status, it requests for forks
+    // acquire, it picks up the fork
     private void hunger() throws ResetException {
         color = WAIT_COLOR;
         t.repaint();
         delay(FUMBLE_TIME);
+
+        // left fork is the one given initially to the person on the left. So we request
+        // that first?
+        // x and y is a way to indicate specific philosopher
+        // ask for left fork from other philosopher, but yields until it's available
         left_fork.acquire(x, y);
+        // gives other threads the same priority a chance to execute
         Thread.yield(); // you aren't allowed to remove this
         right_fork.acquire(x, y);
+        // Thread.yield(); // you aren't allowed to remove this
+
+        // both forks are available, now lock
     }
 
+    // P is eating right now, green
+    // eats then release fork (puts fork down)
+    // when forks
     private void eat() throws ResetException {
+        System.out.println("Philosopher " + philosopher_number_indicator + " eating");
+
         color = EAT_COLOR;
         t.repaint();
+        // Eating
         delay(EAT_TIME);
+        // done eating
+        // releases left fork then yields
         left_fork.release();
+        // why is yield in the middle of two?
         Thread.yield(); // you aren't allowed to remove this
         right_fork.release();
+
+        // done eating notify all
     }
 } // end of Philosopher class
 
@@ -322,14 +378,17 @@ class Table extends JPanel {
                     (int) (CANVAS_SIZE / 2.0 - CANVAS_SIZE / 6.0 * Math.sin(angle)));
         }
 
+        // As we create a thread, we start it as well
+        // we pass in two fork instances when creating a philosopher instance
         for (int i = 0; i < NUM_PHILS; i++) {
             double angle = Math.PI / 2 + 2 * Math.PI / NUM_PHILS * i;
+            // philosopher constructor (Table, cx, cy, lf, rf, coordinator)
             philosophers[i] = new Philosopher(this,
                     (int) (CANVAS_SIZE / 2.0 + CANVAS_SIZE / 3.0 * Math.cos(angle)),
                     (int) (CANVAS_SIZE / 2.0 - CANVAS_SIZE / 3.0 * Math.sin(angle)),
                     forks[i],
                     forks[(i + 1) % NUM_PHILS],
-                    c);
+                    c, i);
             // starts a new thread
             // Thread goes from new state to runnable state
             // When this thread gets a chance, run() method runs

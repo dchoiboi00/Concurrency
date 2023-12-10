@@ -39,16 +39,24 @@ import java.lang.Thread.*;
 
 public class Dining {
     private static final int CANVAS_SIZE = 360;
+    public static Boolean verbose = false;
     // pixels in each direction;
     // needs to agree with size in dining.html
 
     public static void main(String[] args) {
+        // verbose
+        if (args.length > 0) {
+            if (args[0].equals("-v")) {
+                verbose = true;
+            }
+        }
+
         JFrame f = new JFrame("Dining");
         f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         Dining me = new Dining();
 
         final Coordinator c = new Coordinator();
-        final Table t = new Table(c, CANVAS_SIZE);
+        final Table t = new Table(c, CANVAS_SIZE, verbose);
         // arrange to call graphical setup from GUI thread
         try {
             SwingUtilities.invokeAndWait(new Runnable() {
@@ -73,18 +81,22 @@ class Fork {
     private int orig_y;
     private int x;
     private int y;
+    public int ownerId;
+    public Boolean dirty;
 
     // Constructor.
     // cx and cy indicate coordinates of center.
     // Note that fillOval method expects coordinates of upper left corner
     // of bounding box instead.
-    //
-    public Fork(Table T, int cx, int cy) {
+    
+    public Fork(Table T, int cx, int cy, int o_id, Boolean d) {
         t = T;
         orig_x = cx;
         orig_y = cy;
         x = cx;
         y = cy;
+        ownerId = o_id;
+        dirty = d;
     }
 
     public void reset() {
@@ -96,7 +108,8 @@ class Fork {
 
     // who wants it
     // arguments are coordinates of acquiring philosopher's center
-    // picks up the fork, move coordinates of fork. Indicating P has picked a specific fork up
+    // picks up the fork, move coordinates of fork. Indicating P has picked a
+    // specific fork up
     public void acquire(int px, int py) {
         // clear paint
         clear();
@@ -157,7 +170,12 @@ class Philosopher extends Thread {
     private Fork right_fork;
     private Random prn;
     private Color color;
+    // philosopher owner id
     private int philosopher_number_indicator;
+    // Boolean value to indicate last philosopher on the table or not
+    private Boolean last_person;
+    // printing variable passed in when creating a Philosopher instance within the Table's constructor
+    private Boolean print_v;
 
     // Constructor.
     // cx and cy indicate coordinates of center
@@ -165,7 +183,7 @@ class Philosopher extends Thread {
     // of bounding box instead.
     //
     public Philosopher(Table T, int cx, int cy,
-            Fork lf, Fork rf, Coordinator C, int i) {
+            Fork lf, Fork rf, Coordinator C, int i, Boolean l, Boolean p) {
         t = T;
         x = cx;
         y = cy;
@@ -175,6 +193,8 @@ class Philosopher extends Thread {
         prn = new Random();
         color = THINK_COLOR;
         philosopher_number_indicator = i;
+        last_person = l;
+        print_v = p;
     }
 
     // start method of Thread calls run()
@@ -184,29 +204,23 @@ class Philosopher extends Thread {
         for (;;) {
             try {
                 // Think doesn't require forks or any shared data
-                think();
                 if (c.gate())
-                    delay(THINK_TIME / 2.0);
+                    delay(EAT_TIME / 2.0);
+                think();
 
-                // lock the fork so that when a philosopher is using a fork object. No other philosopher uses it
-                // at the sametime
-                // sync left and right fork.
-                // or else, a thread might be trying to acquire a fork that's current in usage by another
-                // philosopher. So, if any left_fork is current being used by other 
-                // 
+                // We label this as a critical section to prevent situation (a bad race) where
+                // when different philosophers might access with the same fork at the sametime
+                // and does unexpected operations to the forks
                 synchronized (left_fork) {
                     synchronized (right_fork) {
+                        if (c.gate())
+                            delay(THINK_TIME / 2.0);
                         hunger();
                         if (c.gate())
                             delay(FUMBLE_TIME / 2.0);
                         eat();
-                        if (c.gate())
-                            delay(EAT_TIME / 2.0);
                     }
                 }
-
-                // hungry, we will request for both forks. But don't take fork yet until both
-                // fork is available
 
             } catch (ResetException e) {
                 color = THINK_COLOR;
@@ -257,13 +271,15 @@ class Philosopher extends Thread {
 
     // P is just thinking, blue
     private void think() throws ResetException {
-        System.out.println("Philosopher " + philosopher_number_indicator + " thinking");
+        // used to check if "-v" is passed in the command line when running the program
+        if (print_v) {
+            System.out.println("Philosopher " + philosopher_number_indicator + " thinking");
+        }
         color = THINK_COLOR;
         t.repaint();
         delay(THINK_TIME);
     }
 
-    //
     // P is hungry, red
     // while in hunger status, it requests for forks
     // acquire, it picks up the fork
@@ -276,11 +292,77 @@ class Philosopher extends Thread {
         // that first?
         // x and y is a way to indicate specific philosopher
         // ask for left fork from other philosopher, but yields until it's available
-        left_fork.acquire(x, y);
-        // gives other threads the same priority a chance to execute
-        Thread.yield(); // you aren't allowed to remove this
-        right_fork.acquire(x, y);
-        // Thread.yield(); // you aren't allowed to remove this
+
+        // This boolean variable is used to check if this Philosopher is the last person
+        // or not
+        // If not, we will always acquire left fork first and then right fork
+        // If so, we will always acquire the right fork and then the left fork
+        // this way, we can prevent a dealock situation (which is likely to happen
+        // intially when
+        // all forks are dirty) Where each Philosopher acquire the left fork together at
+        // the sametime
+        if (!last_person) {
+            while (left_fork.ownerId != philosopher_number_indicator) {
+                if (left_fork.dirty) {
+                    // change ownership to current philosopher's id
+                    left_fork.ownerId = philosopher_number_indicator;
+                    left_fork.dirty = false;
+                    left_fork.acquire(x, y);
+                } else {
+                    Thread.yield(); // you aren't allowed to remove this
+                }
+
+            }
+            // left_fork.acquire(x, y);
+            // gives other threads the same priority a chance to execute
+            Thread.yield(); // you aren't allowed to remove this
+
+            while (right_fork.ownerId != philosopher_number_indicator) {
+                if (right_fork.dirty) {
+                    // change ownership to current philosopher's id
+                    right_fork.ownerId = philosopher_number_indicator;
+                    // sets it to clean
+                    right_fork.dirty = false;
+                    right_fork.acquire(x, y);
+
+                } else {
+                    Thread.yield(); // you aren't allowed to remove this
+
+                }
+
+            } // Thread.yield(); // you aren't allowed to remove this
+        } else {
+            while (right_fork.ownerId != philosopher_number_indicator) {
+                if (right_fork.dirty) {
+                    // change ownership to current philosopher's id
+                    right_fork.ownerId = philosopher_number_indicator;
+                    // sets it to clean
+                    right_fork.dirty = false;
+                    right_fork.acquire(x, y);
+                } else {
+                    Thread.yield(); // you aren't allowed to remove this
+
+                }
+
+            } // Thread.yield(); // you aren't allowed to remove this
+            Thread.yield();
+            while (left_fork.ownerId != philosopher_number_indicator) {
+                if (left_fork.dirty) {
+                    // change ownership to current philosopher's id
+                    left_fork.ownerId = philosopher_number_indicator;
+
+                    left_fork.dirty = false;
+                    left_fork.acquire(x, y);
+                } else {
+                    Thread.yield(); // you aren't allowed to remove this
+
+                }
+
+            }
+            // left_fork.acquire(x, y);
+            // gives other threads the same priority a chance to execute
+
+        }
 
         // both forks are available, now lock
     }
@@ -289,7 +371,11 @@ class Philosopher extends Thread {
     // eats then release fork (puts fork down)
     // when forks
     private void eat() throws ResetException {
-        System.out.println("Philosopher " + philosopher_number_indicator + " eating");
+        // used to check if "-v" is passed in the command line when running the program
+        if (print_v) {
+
+            System.out.println("Philosopher " + philosopher_number_indicator + " eating");
+        }
 
         color = EAT_COLOR;
         t.repaint();
@@ -297,10 +383,17 @@ class Philosopher extends Thread {
         delay(EAT_TIME);
         // done eating
         // releases left fork then yields
+
+        left_fork.dirty = true;
+
         left_fork.release();
+        // notifyAll();
         // why is yield in the middle of two?
         Thread.yield(); // you aren't allowed to remove this
+        right_fork.dirty = true;
         right_fork.release();
+
+        // notifyAll();
 
         // done eating notify all
     }
@@ -362,7 +455,7 @@ class Table extends JPanel {
     // which creates instances of Philosophers and Forks
     // Table is created within Main function and passed into UI instance
     // Table also starts the Philosopher (Threads) instances
-    public Table(Coordinator C, int CANVAS_SIZE) { // constructor
+    public Table(Coordinator C, int CANVAS_SIZE, Boolean print_v) { // constructor
         c = C;
         forks = new Fork[NUM_PHILS];
         philosophers = new Philosopher[NUM_PHILS];
@@ -375,7 +468,7 @@ class Table extends JPanel {
             // Same Table instance for alll forks and all philosophers
             forks[i] = new Fork(this,
                     (int) (CANVAS_SIZE / 2.0 + CANVAS_SIZE / 6.0 * Math.cos(angle)),
-                    (int) (CANVAS_SIZE / 2.0 - CANVAS_SIZE / 6.0 * Math.sin(angle)));
+                    (int) (CANVAS_SIZE / 2.0 - CANVAS_SIZE / 6.0 * Math.sin(angle)), -1, true);
         }
 
         // As we create a thread, we start it as well
@@ -383,12 +476,23 @@ class Table extends JPanel {
         for (int i = 0; i < NUM_PHILS; i++) {
             double angle = Math.PI / 2 + 2 * Math.PI / NUM_PHILS * i;
             // philosopher constructor (Table, cx, cy, lf, rf, coordinator)
-            philosophers[i] = new Philosopher(this,
-                    (int) (CANVAS_SIZE / 2.0 + CANVAS_SIZE / 3.0 * Math.cos(angle)),
-                    (int) (CANVAS_SIZE / 2.0 - CANVAS_SIZE / 3.0 * Math.sin(angle)),
-                    forks[i],
-                    forks[(i + 1) % NUM_PHILS],
-                    c, i);
+
+            if (i == NUM_PHILS - 1) {
+                philosophers[i] = new Philosopher(this,
+                        (int) (CANVAS_SIZE / 2.0 + CANVAS_SIZE / 3.0 * Math.cos(angle)),
+                        (int) (CANVAS_SIZE / 2.0 - CANVAS_SIZE / 3.0 * Math.sin(angle)),
+                        forks[i],
+                        forks[(i + 1) % NUM_PHILS],
+                        c, i, true, print_v);
+            } else {
+
+                philosophers[i] = new Philosopher(this,
+                        (int) (CANVAS_SIZE / 2.0 + CANVAS_SIZE / 3.0 * Math.cos(angle)),
+                        (int) (CANVAS_SIZE / 2.0 - CANVAS_SIZE / 3.0 * Math.sin(angle)),
+                        forks[i],
+                        forks[(i + 1) % NUM_PHILS],
+                        c, i, false, print_v);
+            }
             // starts a new thread
             // Thread goes from new state to runnable state
             // When this thread gets a chance, run() method runs

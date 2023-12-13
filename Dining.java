@@ -101,6 +101,8 @@ class Fork {
 
     public void reset() {
         clear();
+        ownerId = -1;
+        dirty = true;
         x = orig_x;
         y = orig_y;
         t.repaint();
@@ -128,7 +130,9 @@ class Fork {
     // render self
     //
     public void draw(Graphics g) {
-        g.setColor(Color.black);
+        if (dirty) g.setColor(new Color(102,51,0));
+        else g.setColor(Color.LIGHT_GRAY);
+        
         g.fillOval(x - XSIZE / 2, y - YSIZE / 2, XSIZE, YSIZE);
     }
 
@@ -297,11 +301,10 @@ class Philosopher extends Thread {
         // or not
         // If not, we will always acquire left fork first and then right fork
         // If so, we will always acquire the right fork and then the left fork
-        // this way, we can prevent a dealock situation (which is likely to happen
-        // intially when
-        // all forks are dirty) Where each Philosopher acquire the left fork together at
-        // the sametime
-        if (!last_person) {
+        // this way, we can prevent a deadlock situation (which is likely to happen
+        // intially when all forks are dirty) Where each Philosopher acquire the left fork 
+        // together at the sametime
+        if (!last_person) { // left fork first, then right fork
             while (left_fork.ownerId != philosopher_number_indicator) {
                 if (left_fork.dirty) {
                     // change ownership to current philosopher's id
@@ -309,11 +312,10 @@ class Philosopher extends Thread {
                     left_fork.dirty = false;
                     left_fork.acquire(x, y);
                 } else {
-                    Thread.yield(); // you aren't allowed to remove this
+                    Thread.yield(); // yield the core while waiting
                 }
 
             }
-            // left_fork.acquire(x, y);
             // gives other threads the same priority a chance to execute
             Thread.yield(); // you aren't allowed to remove this
 
@@ -326,12 +328,10 @@ class Philosopher extends Thread {
                     right_fork.acquire(x, y);
 
                 } else {
-                    Thread.yield(); // you aren't allowed to remove this
-
+                    Thread.yield(); // yield the core while waiting
                 }
-
-            } // Thread.yield(); // you aren't allowed to remove this
-        } else {
+            }
+        } else { // last philosopher: right fork first, then left fork
             while (right_fork.ownerId != philosopher_number_indicator) {
                 if (right_fork.dirty) {
                     // change ownership to current philosopher's id
@@ -340,11 +340,11 @@ class Philosopher extends Thread {
                     right_fork.dirty = false;
                     right_fork.acquire(x, y);
                 } else {
-                    Thread.yield(); // you aren't allowed to remove this
+                    Thread.yield(); // yield the core while waiting
 
                 }
 
-            } // Thread.yield(); // you aren't allowed to remove this
+            }
             Thread.yield();
             while (left_fork.ownerId != philosopher_number_indicator) {
                 if (left_fork.dirty) {
@@ -354,17 +354,11 @@ class Philosopher extends Thread {
                     left_fork.dirty = false;
                     left_fork.acquire(x, y);
                 } else {
-                    Thread.yield(); // you aren't allowed to remove this
-
+                    Thread.yield(); // yield the core while waiting
                 }
 
             }
-            // left_fork.acquire(x, y);
-            // gives other threads the same priority a chance to execute
-
         }
-
-        // both forks are available, now lock
     }
 
     // P is eating right now, green
@@ -382,20 +376,11 @@ class Philosopher extends Thread {
         // Eating
         delay(EAT_TIME);
         // done eating
-        // releases left fork then yields
-
-        left_fork.dirty = true;
-
+        left_fork.dirty = true; // releases left fork then yields
         left_fork.release();
-        // notifyAll();
-        // why is yield in the middle of two?
         Thread.yield(); // you aren't allowed to remove this
         right_fork.dirty = true;
         right_fork.release();
-
-        // notifyAll();
-
-        // done eating notify all
     }
 } // end of Philosopher class
 
